@@ -30,16 +30,14 @@ int choose(int n, int k){
 
 int main(void) {
 
-	timespec tv;
 	int count = 0;
 	int bar_count = 0;
 	int edge = 0;
 	int total = 0;
 	int memory[1000];
-	char answer = '';
+	int answer = 0;
 	int n = 8;
 	int k = 3;
-	bool code39 = false;
 
 
 	ev3Setup();
@@ -51,13 +49,10 @@ int main(void) {
 	ev3MotorSetPower(MOTOR_A, -78);
 	ev3MotorSetPower(MOTOR_B, -80);
 
-	cout << "Code 39?  (y or n): " ;
+	cout << "Code 39?  (1 for yes, 0 for no): " ;
 	cin >> answer;
 
-	if(answer == 'Y' || 'y')
-		code39 = true;
-
-	if(code39) {
+	if(answer == 1) {
 
 
 		while (!escapeButton.isPressed()) {
@@ -70,36 +65,50 @@ int main(void) {
 				ev3MotorRun(MOTOR_B);
 			}
 
-			//sensor values fall between 5 and 90, therefore if the count is greater than 20, a color transition has occured
-			//thus, it is an edge.
-			if(ev3ColorReadReflected(SENSOR_1) > 20) memory[count] =1;
-			else memory[count] =0;
+			//if the count is greater than 20,
+			//then the bars are white and make it a 1
+			if(ev3ColorReadReflected(SENSOR_1) > 20) memory[count] = 1;
+			else memory[count] = 0;
 
 			//if the count is >= 2, and there is a change in values between 1 and 0, then
 			//an edge has been found
 
+			//this algorithm works by by detecting wide vs narrow bars.  for code 39 to work,
+			//there must be exactly 3 wide bars in the code.  it takes advantage of the
+			//" n choose k" combinatoric function to detect the numbers.  if exactly
+			// 3 wide bars are detected, it is a valid code.  if not, the code is invalid.
 			if((count >= 2) && (memory[count] != memory[count-1])) {
-				total = total * 2;  //mathematical equivalent of reading binary left to right
 				edge++;
-				if(bar_count > 40) {
+
+				if(bar_count > 40) { //detects a wide bar, decrements k
 					total = total + choose(n,k);
 					k--;
-					bar_count = 0;
 				}
-					//reset the bar count to zero for the next time to detect a 1 or 0
+				//reset bar count for next wide or narrow, decrement n everytime a change is 					//detected.  this is for the choose function.
+				bar_count = 0;
+				n--;
 			}
-			//if robot has passed the final edge of the barcode, stop the motors, and then drop out of loop
+			//if robot has passed 10th edge, stop the motors and output detected number
 			if(edge > 9) {
 				ev3MotorStop(MOTOR_A, MOTOR_FINISH_HOLD);
 				ev3MotorStop(MOTOR_B, MOTOR_FINISH_HOLD);
-				break;
+
+				if(k != 0) {
+					cout << "Invalid code read.  Try again." << endl;
+
+					resetInputMode();
+					return 0;
+				}
+
+				cout << "The total is: " << total << endl;
+
+				resetInputMode();
+				return 0;
 			}
 
 			count++;
 			bar_count++;
-		
 		}
-
 	}
 
 	else {	// binary representation of bar code
@@ -107,49 +116,47 @@ int main(void) {
 
 		//if first iteration of loop, sleep for 3 seconds and then turn the motors on
 
-		if(count == 0) {
-			sleep(3);
-			ev3MotorRun(MOTOR_A);
-			ev3MotorRun(MOTOR_B);
-		}
+			if(count == 0) {
+				sleep(3);
+				ev3MotorRun(MOTOR_A);
+				ev3MotorRun(MOTOR_B);
+			}
 
-		//sensor values fall between 5 and 90, therefore if the count is greater than 20, a color transition has occured
-		//thus, it is an edge.
-		if(ev3ColorReadReflected(SENSOR_1) > 20) memory[count] =1;
-		else memory[count] =0;
+			//if the count is greater than 20,
+			//then the bars are white and make it a 1
+			if(ev3ColorReadReflected(SENSOR_1) > 20) memory[count] =1;
+			else memory[count] =0;
 
-		//if the count is >= 2, and there is a change in values between 1 and 0, then
-		//an edge has been found
+			//if the count is >= 2, and there is a change in values between 1 and 0, then
+			//an edge has been found.  this algorithm works best when binary values are read
+			//left to right.  double the current total everytime an edge is found.
+			//a wide bar represents a 1 and short ones represent a 0.  when a wide bar is
+			//detected, increment the total by one.
 
-		if((count >= 2) && (memory[count] != memory[count-1])) {
-			total = total * 2;  //mathematical equivalent of reading binary left to right
-			edge++;
-			if(bar_count > 40) total++; //if the bar wide, count it as a "1" mathematical equivalent of a 1.
-			bar_count = 0;	//reset the bar count to zero for the next time to detect a 1 or 0
-		}
-		//if robot has passed the final edge of the barcode, stop the motors, and then drop out of loop
-		if(edge > 9) {
-			ev3MotorStop(MOTOR_A, MOTOR_FINISH_HOLD);
-			ev3MotorStop(MOTOR_B, MOTOR_FINISH_HOLD);
-			break;
-		}
+			if((count >= 2) && (memory[count] != memory[count-1])) {
+				total = total * 2;
+				edge++;
+				//if the bar is wide, add one to the total			
+				if(bar_count > 40) total++;
+				//whether the bar is wide or narrow, bar_counts gets reset to 0
+				bar_count = 0;
+			}
+			//if robot has passed the final edge of the barcode, stop the motors, output
+			//the read number, and exit the program.
+			if(edge > 9) {
+				ev3MotorStop(MOTOR_A, MOTOR_FINISH_HOLD);
+				ev3MotorStop(MOTOR_B, MOTOR_FINISH_HOLD);
 
-		count++;
-		bar_count++;
+				cout << "The total is: " << total << endl;
+
+				resetInputMode();
+				return 0;
+			}
+
+			count++;
+			bar_count++;
 		
+			}
 		}
 	}
-
-	if(code39 && k != 0) {
-		cout "Invalid Code!" << endl;
-		return 0;
-	}
-
-
-	cout << "The number read is: " << total << endl;
-
-
-  resetInputMode();
-
-  return 0;
 }
